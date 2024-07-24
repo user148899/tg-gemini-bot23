@@ -4,6 +4,7 @@ import google.generativeai as genai
 import PIL.Image
 
 from .config import GOOGLE_API_KEY, generation_config, safety_settings, gemini_err_info, new_chat_info
+
 genai.configure(api_key=GOOGLE_API_KEY[0])
 
 model_usual = genai.GenerativeModel(
@@ -24,7 +25,10 @@ def list_models() -> None:
         if "generateContent" in m.supported_generation_methods:
             print(m.name)
 
+
 """ This function is deprecated """
+
+
 def generate_content(prompt: str) -> str:
     """generate text from prompt"""
     try:
@@ -54,7 +58,7 @@ class ChatConversation:
     def __init__(self) -> None:
         self.chat = model_usual.start_chat(history=[])
 
-    def send_message(self, prompt: str, image: PIL.Image.Image = None) -> str:
+    def send_message(self, prompt: str, image: PIL.Image = None) -> str:
         """Send a message which could be text or text with an image."""
         if prompt.startswith("/new"):
             self.__init__()

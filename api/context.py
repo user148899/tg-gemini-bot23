@@ -9,13 +9,9 @@ The class ImageChatManager is rather simple, as the images in Gemini Pro
 do not have a contextual environment. This class performs some tasks
 such as obtaining photos to addresses and so on.
 """
-from io import BytesIO
 from typing import Dict
 
-import requests
-
-from .config import BOT_TOKEN
-from .gemini import ChatConversation, generate_text_with_image
+from .gemini import ChatConversation
 
 
 class ChatManager:
