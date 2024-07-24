@@ -1,64 +1,86 @@
-"""
-All the chat that comes through the Telegram bot gets passed to the
-handle_message function. This function checks out if the user has the
-green light to chat with the bot. Once that's sorted, it figures out if
-the user sent words or an image and deals with it accordingly.
-
-For text messages, it fires up the ChatManager class that keeps track of
-the back-and-forth with that user.
-
-As for images, in Gemini pro, they're context-free, so you can handle
-them pretty straight-up without much fuss.
-"""
-
 from .auth import is_authorized
-from .command import excute_command
+from .command import execute_command
 from .context import ChatManager
 from .telegram import Update, send_message
-from .printLog import send_log,send_image_log
+from .printLog import send_log, send_image_log
 from .config import *
-from .telegram import TELEGRAM_API
-import requests
-import PIL
-from io import BytesIO
+from .gemini import generate_content, generate_text_with_image, ChatConversation
 
 chat_manager = ChatManager()
-
 
 def handle_message(update_data):
     update = Update(update_data)
 
-    if not is_authorized(update.is_group, update.from_id, update.user_name, update.chat_id, update.group_name):
-        permission_info = group_no_permission_info if update.is_group else user_no_permission_info
-        send_message(update.chat_id, f"{permission_info}\nID:`{update.chat_id if update.is_group else update.from_id}`")
-        return
+    # Log the incoming event
+    if update.is_group:
+        log = f"{event_received}\n@{update.user_name} id:`{update.from_id}` {group} @{update.group_name} id:`{update.chat_id}`\n{the_content_sent_is}\n{update.text}\n```json\n{update_data}```"
+    else:
+        log = f"{event_received}\n@{update.user_name} id:`{update.from_id}`\n{the_content_sent_is}\n{update.text}\n```json\n{update_data}```"
+    send_log(log)
+
+    # Check if the user is authorized to interact with the bot
+    authorized = is_authorized(update.is_group, update.from_id, update.user_name, update.chat_id, update.group_name)
 
     if update.type == "command":
-        response_text = excute_command(update.from_id, update.text, update.from_type, update.chat_id)
-        if response_text:
+        response_text = execute_command(update.from_id, update.text, update.from_type, update.chat_id)
+        if response_text != "":
             send_message(update.chat_id, response_text)
-    else:
-        history_id = update.from_id if update.is_group and GROUP_MODE == "2" else update.chat_id
+            if update.is_group:
+                log = f"@{update.user_name} id:`{update.from_id}` {group} @{update.group_name} id:`{update.chat_id}`{the_content_sent_is}\n{update.text}\n{the_reply_content_is}\n{response_text}"
+            else:
+                log = f"@{update.user_name} id:`{update.from_id}`{the_content_sent_is}\n{update.text}\n{the_reply_content_is}\n{response_text}"
+            send_log(log)
+
+    elif not authorized:
+        if update.is_group:
+            send_message(update.chat_id, f"{group_no_permission_info}\nID:`{update.chat_id}`")
+            log = f"@{update.user_name} id:`{update.from_id}` {group} @{update.group_name} id:`{update.chat_id}`{no_rights_to_use},{the_content_sent_is}\n{update.text}"
+        else:
+            send_message(update.from_id, f"{user_no_permission_info}\nID:`{update.from_id}`")
+            log = f"@{update.user_name} id:`{update.from_id}`{no_rights_to_use},{the_content_sent_is}\n{update.text}"
+        send_log(log)
+        return
+
+    elif update.type == "text":
+        if update.is_group and GROUP_MODE == "2":
+            history_id = update.from_id
+        else:
+            history_id = update.chat_id
         chat = chat_manager.get_chat(history_id)
+        response_text = chat.send_message(update.text)
+        extra_text = f"\n\n{prompt_new_info}" if chat.history_length >= prompt_new_threshold * 2 else ""
+        response_text = f"{response_text}{extra_text}"
+        send_message(update.chat_id, response_text)
+        dialogueLogarithm = int(chat.history_length / 2)
+        if update.is_group:
+            log = f"@{update.user_name} id:`{update.from_id}` {group} @{update.group_name} id:`{update.chat_id}`{the_content_sent_is}\n{update.text}\n{the_reply_content_is}\n{response_text}\n{the_logarithm_of_historical_conversations_is}{dialogueLogarithm}"
+        else:
+            log = f"@{update.user_name} id:`{update.from_id}`{the_content_sent_is}\n{update.text}\n{the_reply_content_is}\n{response_text}\n{the_logarithm_of_historical_conversations_is}{dialogueLogarithm}"
+        send_log(log)
 
-        if update.type == "photo":
-            # Get the image bytes from the file ID
-            photo_url = f"{TELEGRAM_API}/getFile?file_id={update.file_id}"
-            file_path = requests.get(photo_url).json()['result']['file_path']
-            full_file_url = f"{TELEGRAM_API}/file/bot{BOT_TOKEN}/{file_path}"
-            image_bytes = BytesIO(requests.get(full_file_url).content)
-            image = PIL.Image.open(image_bytes)
+    elif update.type == "photo":
+        if update.is_group and GROUP_MODE == "2":
+            history_id = update.from_id
+        else:
+            history_id = update.chat_id
+        chat = chat_manager.get_chat(history_id)
+        response_text = generate_text_with_image(update.photo_caption, update.photo_bytes)
+        print(f"update.message_id {update.message_id}")
+        send_message(update.chat_id, response_text, reply_to_message_id=update.message_id)
 
-            response_text = chat.send_message(update.photo_caption, image)
-            send_message(update.chat_id, response_text, update.file_id)
-        elif update.type == "text":
-            response_text = chat.send_message(update.text)
-            send_message(update.chat_id, response_text)
+        photo_url = chat.tel_photo_url()
+        imageID = update.file_id
+        if update.is_group:
+            log = f"@{update.user_name} id:`{update.from_id}` {group} @{update.group_name} id:`{update.chat_id}`[photo]({photo_url}),{the_accompanying_message_is}\n{update.photo_caption}\n{the_reply_content_is}\n{response_text}"
+        else:
+            log = f"@{update.user_name} id:`{update.from_id}`[photo]({photo_url}),{the_accompanying_message_is}\n{update.photo_caption}\n{the_reply_content_is}\n{response_text}"
+        send_image_log("", imageID)
+        send_log(log)
 
-        dialogue_logarithm = int(chat.history_length / 2)
-        extra_info = f"\n\n{prompt_new_info}" if chat.history_length >= prompt_new_threshold * 2 else ""
-        log = (f"@{update.user_name} id:`{update.from_id}`"
-               f"{group if update.is_group else ''} @{update.group_name if update.is_group else ''} id:`{update.chat_id}`"
-               f"{the_content_sent_is}\n{update.text}\n{the_reply_content_is}\n{response_text}{extra_info}"
-               f"\n{the_logarithm_of_historical_conversations_is}{dialogue_logarithm}")
+    else:
+        send_message(update.chat_id, f"{unable_to_recognize_content_sent}\n\n/help")
+        if update.is_group:
+            log = f"@{update.user_name} id:`{update.from_id}` {group} @{update.group_name} id:`{update.chat_id}`{send_unrecognized_content}"
+        else:
+            log = f"@{update.user_name} id:`{update.from_id}`{send_unrecognized_content}"
         send_log(log)
