@@ -64,7 +64,7 @@ def send_message_test(id, command):
     send_log("success")
     return ""
 
-def excute_command(from_id, command, from_type, chat_id):
+def execute_command(from_id, command, from_type, chat_id):
     if command.startswith("start") or command.startswith("help"):
         return help()
 
