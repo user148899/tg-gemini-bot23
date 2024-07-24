@@ -17,6 +17,10 @@ from .context import ChatManager
 from .telegram import Update, send_message
 from .printLog import send_log,send_image_log
 from .config import *
+from .telegram import TELEGRAM_API
+import requests
+import PIL
+from io import BytesIO
 
 chat_manager = ChatManager()
 
@@ -46,7 +50,7 @@ def handle_message(update_data):
             image = PIL.Image.open(image_bytes)
 
             response_text = chat.send_message(update.photo_caption, image)
-            send_imageMessage(update.chat_id, response_text, update.file_id)
+            send_message(update.chat_id, response_text, update.file_id)
         elif update.type == "text":
             response_text = chat.send_message(update.text)
             send_message(update.chat_id, response_text)
