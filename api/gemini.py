@@ -4,7 +4,6 @@ import google.generativeai as genai
 import PIL.Image
 
 from .config import GOOGLE_API_KEY, generation_config, safety_settings, gemini_err_info, new_chat_info
-
 genai.configure(api_key=GOOGLE_API_KEY[0])
 
 model_usual = genai.GenerativeModel(
