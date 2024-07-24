@@ -49,34 +49,38 @@ def generate_text_with_image(prompt: str, image_bytes: BytesIO) -> str:
 
 class ChatConversation:
     """
-    Kicks off an ongoing chat. If the input is /new,
-    it triggers the start of a fresh conversation.
+    Manages a conversation that can handle both text and images.
     """
 
     def __init__(self) -> None:
         self.chat = model_usual.start_chat(history=[])
 
-    def send_message(self, prompt: str) -> str:
-        """send message"""
+    def send_message(self, prompt: str, image: PIL.Image.Image = None) -> str:
+        """Send a message which could be text or text with an image."""
         if prompt.startswith("/new"):
             self.__init__()
-            result = new_chat_info
-        else:
-            try:
+            return new_chat_info
+
+        try:
+            if image:
+                # Send both the image and the prompt
+                response = self.chat.send_message([image, prompt])
+            else:
+                # Send only the prompt as text
                 response = self.chat.send_message(prompt)
-                result = response.text
-            except Exception as e:
-                result = f"{gemini_err_info}\n{repr(e)}"
-        return result
+            return response.text
+        except Exception as e:
+            return f"{gemini_err_info}\n{repr(e)}"
 
     @property
     def history(self):
+        """Returns the conversation history."""
         return self.chat.history
 
     @property
     def history_length(self):
+        """Returns the length of the conversation history."""
         return len(self.chat.history)
-
 
 if __name__ == "__main__":
     print(list_models())
